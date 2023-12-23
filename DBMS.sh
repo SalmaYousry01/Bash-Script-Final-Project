@@ -259,3 +259,231 @@ if [ -f "$tableName" ] || [ -f ".$tableName.metadata" ];
 fi
 	tableMenu
 }
+
+#Function allows user to insert data he wants in the table(file)
+
+function insertIntoTable {
+        
+	ls /home/salma01/DBMS/$dbName
+        echo -e "This Is The List Of Your Available Tables, Choose One Of The Above: \c " 
+	read tableName
+
+	# Checking if table name exists
+  if [ ! -f ".$tableName.metadata" ]; then
+    echo "Table $tableName doesn't exist."
+    exit
+  fi
+
+  # Read column names and types from metadata file
+  colName=($(cut -d':' -f1 ".$tableName.metadata"))
+  types=($(cut -d':' -f2 ".$tableName.metadata"))
+
+  # Loop to check if number of inputs is equal to the number of columns
+  for ((i = 0; i < ${#colName[@]}-1; i++)); do
+    while true; do
+      echo -e "Enter value for ${colName[$i]} (${types[$i]}): \c"
+      read value
+
+      # Cases to check if the user entered an (integer) in the field that needs an integer and (string) in the field that needs a string
+      case ${types[$i]} in
+        "int") if ! [[ $value =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid input for ${colName[$i]}, Please enter a number"
+            continue
+          fi
+          ;;
+        "str") 
+		# User will be obligated to enter a charachter
+          if [[ $value =~ [0-9] ]]; then
+            echo "Error: Invalid input for ${colName[$i]}, Please enter text"
+            continue
+          fi
+          ;;
+      esac
+
+           # Condition to check uniqness of the primary-key and won't allow user to repeat the value of it
+      if grep -q "^$value " "$tableName"; then
+        echo "Error: Value "$value" For ${colName[$i]} Must Be Unique. Please Try Again"
+      else
+        echo -n "$value " >> "$tableName"
+        break
+      fi
+    done
+  done
+
+  # Append a new line to the table file
+  echo >> "$tableName"
+  echo "Data inserted into $tableName successfully."
+  tableMenu
+}
+
+#Function to list the available tables created
+
+function listTables
+{
+	ls /home/salma01/DBMS/$dbName
+	echo "This Is The List Of Your Available Tables"
+	tableMenu
+}
+
+# FUnction allows user to delete the data from the table selected
+function deleteFromTable
+{
+echo "Here's A List Of The Available Tables: "
+ls /home/salma01/DBMS/$dbName
+echo "Enter The Name Of Table: "
+read tableName
+
+# Condition to check if the table(File) entered by the user exists or not
+if [[ -f $tableName ]]; then
+	echo "The Following Are The Fields Avaliable To Delete: "
+	cat /home/salma01/DBMS/$dbName/$tableName
+	echo "Enter Value of Record Primary Key: "
+	read primarykey
+
+	# Searching for the value of the PK the user entered in the table selected
+	if grep -q "^$primarykey" $tableName; then
+	
+	# This will allow user to delete the whole record specified by PK in the table	
+	sed -i "/^$primarykey/d" "/home/salma01/DBMS/$dbName/$tableName"
+	echo "Record Deleted Successfully"
+	tableMenu
+	else
+	echo "Record Not Found"
+	fi
+else
+	echo "There Is No Table Named $tableName In The Database"
+fi
+}
+
+function selectFromTable
+{
+#select statement to make user choose whether he wants to select a row or a column to view
+select choice in "Select by row" "Select by column" "EXIT"
+  do
+          case $REPLY in
+          1)
+     		 ls /home/salma01/DBMS/$dbName
+		 echo "Enter The Table You Want To Select a Record From: "
+     		 read tableName
+
+		 #condition to check if the table name the user entered exists
+		 if [ -f $tableName ]; then
+
+                      cat /home/salma01/DBMS/$dbName/$tableName
+#if the user entered existed table he will be asked to enter the id of the record he wants to view
+		      echo "Enter The Id Of The Record You Are Searching For: "
+ 		      read value
+                      
+#searching for exact number of the record the user entered in the table he chose and save the value in (result) variable
+		      result=$(grep -w "$value" "/home/salma01/DBMS/$dbName/$tableName")
+      
+		      #checking if the value he entered exists or not
+     		      if [ "$result" ]; then
+  		     	 echo -e "Record found:\n$result\n"
+			 selectFromTable
+     		     	 else
+      	             	 echo "Record not found"
+ 		     	 fi
+		 else
+  		      echo "table does not exist"
+		 fi
+     		 ;;
+
+   	  2)     
+		 ls /home/salma01/DBMS/$dbName
+ 		 echo "Enter The Table You Want To Select a Field From: "
+   		 read tableName
+
+		 #condition to check if the table name the user entered exists
+		 if [ -f $tableName ]; then
+		      cat /home/salma01/DBMS/$dbName/$tableName
+                      echo "Enter The Field Number You Are Searching For: "
+                      read field
+                      
+	      	      #gets the field separated by space from the table
+                      result=$(cut -d' ' -f"$field" $tableName)
+
+                      #checks availability of field
+                      if [ "$result" ]; then
+                          echo "Result For Field $field" 
+           		  echo "$result"
+			  echo "Here Is The Menu If You Want To Choose Another Option, If Not Press EXIT"
+			  selectFromTable
+                       	  else
+                          echo "Field Not Found"
+		      fi
+		 else
+                          echo "table does not exist"
+		  fi
+	          ;;
+    3) exit ;;
+    *) echo $REPLY is not an option ; tableMenu ; 	   
+  	 esac
+  done
+    	
+}
+
+#Function that allows user to update in the records 
+
+function updateTable {
+  ls -1 /home/salma01/DBMS/$dbName
+  read -p "Enter Table Name You Want To Update: " tableName	
+  cat /home/salma01/DBMS/$dbName/$tableName
+  echo -e "Enter Column Name: \c"
+  read field
+
+#Using AWK to find the index of a specified column in the first line, then stores it in fid
+  fid=$(awk 'BEGIN{FS=" "}{if(NR==1){for(i=1;i<=NF;i++){if($i=="'$field'") print i}}}' "$tableName")
+
+  #Checking if fid has a value or not 
+  if [[ -z $fid ]]; then
+    echo "Column '$field' not found."
+    tableMenu
+  else
+    echo -e "Enter Old Column Value: \c"
+    read val
+
+    #Using AWK to check if the old value exists in the specified column
+    res=$(awk -v fid="$fid" -v val="$val" 'BEGIN{FS=" "}{if ($fid == val) print $fid}' "$tableName")
+
+    #Checking if res has a value
+    if [[ -z $res ]]; then
+      echo "Value '$val' not found in column '$field'."
+      tableMenu
+    else
+      echo -e "Re-enter Column Name: \c"
+      read setField
+      
+#Using AWK to find the index of the specified new column in the first line, then stores it in fid
+      setFid=$(awk 'BEGIN{FS=" "}{if(NR==1){for(i=1;i<=NF;i++){if($i=="'$setField'") print i}}}' "$tableName")
+
+      #Checks if setfid has a value
+      if [[ -z $setFid ]]; then
+        echo "Column '$setField' not found."
+        tableMenu
+      else
+        echo -e "Enter New Value: \c"
+        read newValue
+ 
+	#Find the row number which has the old value
+        NR=$(awk -v fid="$fid" -v val="$val" 'BEGIN{FS=" "}{if ($fid == val) print NR}' "$tableName")
+
+	#Find the old value in the specified seetFid column
+        oldValue=$(awk -v NR="$NR" -v setFid="$setFid" 'BEGIN{FS=" "}{if(NR==NR){for(i=1;i<=NF;i++){if(i==setFid) print $i}}}' "$tableName")
+        echo "Old Value: $oldValue"
+        
+	#Use AWK to update the specified column with the newvalue
+        awk -v fid="$fid" -v val="$val" -v setFid="$setFid" -v newValue="$newValue" 'BEGIN{FS=OFS=" "} {if ($fid == val) $setFid=newValue; print}' "$tableName" > temp && mv temp "$tableName"
+
+        echo "Row Updated Successfully"
+
+	#Just for displaying that the values are updated
+	cat /home/salma01/DBMS/$dbName/$tableName
+	echo -e "\n"
+        tableMenu
+      fi
+    fi
+  fi
+}
+
+dbMenu
