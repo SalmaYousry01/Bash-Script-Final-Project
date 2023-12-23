@@ -1,4 +1,3 @@
-Overview
 This Bash script is a simple Database Management System (DBMS) developed by Salma Yousry and Mostafa Fakhr. It allows users to create, list, connect to, and drop databases. Additionally, users can create, list, drop, insert into, select from, delete from, and update tables within a connected database.
 
 Features:
